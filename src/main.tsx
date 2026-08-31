@@ -30,17 +30,47 @@ const demoPlaces: SushiPlace[] = [
 
 let mapsLoader: Promise<void> | null = null;
 
+const placeFields = [
+  'id', 'displayName', 'formattedAddress', 'rating', 'userRatingCount',
+  'priceLevel', 'location', 'googleMapsURI', 'currentOpeningHours',
+  'regularOpeningHours', 'utcOffsetMinutes',
+];
+const searchRadiusMeters = 10_000;
+
 function loadGoogleMaps(apiKey: string) {
   if (window.google?.maps) return Promise.resolve();
   if (mapsLoader) return mapsLoader;
 
   mapsLoader = new Promise((resolve, reject) => {
     const callbackName = '__makiMapsReady';
-    (window as Window & { __makiMapsReady?: () => void })[callbackName] = resolve;
+    const mapsWindow = window as Window & {
+      __makiMapsReady?: () => void;
+      gm_authFailure?: () => void;
+    };
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      delete mapsWindow[callbackName];
+      callback();
+    };
+    mapsWindow[callbackName] = () => finish(resolve);
+    mapsWindow.gm_authFailure = () => finish(() => {
+      mapsLoader = null;
+      reject(new Error('Google Maps rejected the API key.'));
+    });
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&libraries=maps,places,marker,geocoding&callback=${callbackName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&libraries=maps,places,marker&callback=${callbackName}`;
     script.async = true;
-    script.onerror = () => reject(new Error('Google Maps could not be loaded.'));
+    script.onerror = () => finish(() => {
+      mapsLoader = null;
+      reject(new Error('Google Maps could not be loaded.'));
+    });
+    const timeout = window.setTimeout(() => finish(() => {
+      mapsLoader = null;
+      reject(new Error('Google Maps took too long to load.'));
+    }), 15000);
     document.head.appendChild(script);
   });
   return mapsLoader;
@@ -49,6 +79,11 @@ function loadGoogleMaps(apiKey: string) {
 function getPriceLevel(level?: string | number | null) {
   if (typeof level === 'number') return Math.min(4, Math.max(1, level));
   const prices: Record<string, number> = {
+    FREE: 1,
+    INEXPENSIVE: 1,
+    MODERATE: 2,
+    EXPENSIVE: 3,
+    VERY_EXPENSIVE: 4,
     PRICE_LEVEL_FREE: 1,
     PRICE_LEVEL_INEXPENSIVE: 1,
     PRICE_LEVEL_MODERATE: 2,
@@ -58,8 +93,47 @@ function getPriceLevel(level?: string | number | null) {
   return prices[String(level)] ?? 2;
 }
 
+function getOpenNow(place: google.maps.places.Place): boolean | undefined {
+  const openingHours = place.currentOpeningHours ?? place.regularOpeningHours;
+  const utcOffsetMinutes = place.utcOffsetMinutes;
+  if (!openingHours?.periods.length || utcOffsetMinutes == null) return undefined;
+
+  const localNow = new Date(Date.now() + utcOffsetMinutes * 60_000);
+  const minutesInWeek = localNow.getUTCDay() * 1440 + localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
+  const weekLength = 7 * 1440;
+
+  return openingHours.periods.some((period) => {
+    const opensAt = period.open.day * 1440 + period.open.hour * 60 + period.open.minute;
+    if (!period.close) return true;
+    let closesAt = period.close.day * 1440 + period.close.hour * 60 + period.close.minute;
+    if (closesAt <= opensAt) closesAt += weekLength;
+    const comparableNow = minutesInWeek < opensAt && closesAt > weekLength
+      ? minutesInWeek + weekLength
+      : minutesInWeek;
+    return comparableNow >= opensAt && comparableNow < closesAt;
+  });
+}
+
+function toSushiPlace(place: google.maps.places.Place, index: number, fallbackAddress: string): SushiPlace | null {
+  if (!place.location) return null;
+  return {
+    id: place.id || `place-${index}`,
+    name: place.displayName || 'Sushi restaurant',
+    address: place.formattedAddress || fallbackAddress,
+    rating: place.rating || 0,
+    reviews: place.userRatingCount || 0,
+    price: getPriceLevel(place.priceLevel),
+    openNow: getOpenNow(place),
+    lat: place.location.lat(),
+    lng: place.location.lng(),
+    mapsUrl: place.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName || 'sushi')}`,
+    note: index === 0 ? 'Top match nearby' : index < 4 ? 'A local favorite' : 'Worth a look',
+  };
+}
+
 function App() {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const configuredApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
+  const apiKey = configuredApiKey && configuredApiKey !== 'your_google_maps_api_key' ? configuredApiKey : '';
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
@@ -75,6 +149,7 @@ function App() {
   const [openOnly, setOpenOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
   const [notice, setNotice] = useState(apiKey ? 'Search a neighborhood to begin.' : 'Demo mode — add a Google Maps API key for live results.');
   const [winner, setWinner] = useState<SushiPlace | null>(null);
 
@@ -97,10 +172,14 @@ function App() {
           clickableIcons: false, streetViewControl: false, mapTypeControl: false,
           fullscreenControl: false, cameraControl: false,
         });
+        setMapFailed(false);
         setMapReady(true);
         setNotice('Live Google Maps is ready.');
       })
-      .catch(() => setNotice('Maps could not load. Check the API key and allowed domains.'));
+      .catch(() => {
+        setMapFailed(true);
+        setNotice('Maps could not load. Check the API key, enabled APIs, billing, and allowed domains.');
+      });
     return () => { cancelled = true; };
   }, [apiKey]);
 
@@ -129,46 +208,82 @@ function App() {
     return () => { cancelled = true; };
   }, [filteredPlaces, activeId, mapReady]);
 
+  function showLivePlaces(
+    results: google.maps.places.Place[],
+    label: string,
+    fallbackAddress: string,
+    searchCenter: google.maps.LatLngLiteral,
+  ) {
+    const livePlaces = results
+      .map((place, index) => toSushiPlace(place, index, fallbackAddress))
+      .filter((place): place is SushiPlace => place !== null);
+
+    setPlaces(livePlaces);
+    setActiveId(livePlaces[0]?.id || '');
+    setActiveRegion(label);
+    setMinRating(0);
+    setOpenOnly(false);
+
+    if (mapRef.current) {
+      if (!livePlaces.length) {
+        mapRef.current.setCenter(searchCenter);
+        mapRef.current.setZoom(12);
+        setNotice(`No sushi restaurants found within 10 km of ${label}.`);
+        return;
+      }
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend(searchCenter);
+      livePlaces.forEach((place) => bounds.extend({ lat: place.lat, lng: place.lng }));
+      mapRef.current.fitBounds(bounds, 56);
+    }
+    setNotice(`${livePlaces.length} lovely options within 10 km of ${label}.`);
+  }
+
+  async function searchSushiNearby(
+    placesLibrary: google.maps.PlacesLibrary,
+    center: google.maps.LatLngLiteral,
+    label: string,
+  ) {
+    const { Place, SearchNearbyRankPreference } = placesLibrary;
+    const response = await Place.searchNearby({
+      fields: placeFields,
+      locationRestriction: { center, radius: searchRadiusMeters },
+      includedTypes: ['sushi_restaurant'],
+      maxResultCount: 15,
+      rankPreference: SearchNearbyRankPreference.POPULARITY,
+    });
+    showLivePlaces(response.places, label, `Within 10 km of ${label}`, center);
+  }
+
   async function searchRegion(event: FormEvent) {
     event.preventDefault();
     const query = region.trim();
     if (!query) return;
     setActiveRegion(query);
     if (!apiKey || !mapReady || !mapRef.current) {
-      setNotice(`Showing sample picks near ${query}. Add an API key for live places.`);
+      setNotice(apiKey
+        ? 'Google Maps is not ready. Check the key configuration, then reload the page.'
+        : `Showing sample picks near ${query}. Add an API key for live places.`);
       return;
     }
 
     setLoading(true);
-    setNotice(`Finding the best sushi around ${query}…`);
+    setNotice(`Finding sushi within 10 km of ${query}…`);
     try {
-      const [{ Geocoder }, { Place, SearchByTextRankPreference }] = await Promise.all([
-        google.maps.importLibrary('geocoding') as Promise<google.maps.GeocodingLibrary>,
-        google.maps.importLibrary('places') as Promise<google.maps.PlacesLibrary>,
-      ]);
-      const geocoded = await new Geocoder().geocode({ address: query });
-      const match = geocoded.results[0];
-      if (!match) throw new Error('Region not found');
-      mapRef.current.fitBounds(match.geometry.viewport);
-      const response = await Place.searchByText({
-        textQuery: `sushi restaurants in ${query}`,
-        fields: ['id', 'displayName', 'formattedAddress', 'rating', 'userRatingCount', 'priceLevel', 'location', 'googleMapsURI', 'regularOpeningHours'],
-        includedType: 'sushi_restaurant', locationRestriction: match.geometry.viewport,
-        maxResultCount: 15, rankPreference: SearchByTextRankPreference.RELEVANCE,
+      const placesLibrary = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
+      const locationResponse = await placesLibrary.Place.searchByText({
+        textQuery: query,
+        fields: ['displayName', 'formattedAddress', 'location'],
+        maxResultCount: 1,
       });
-      const livePlaces = await Promise.all(response.places.filter((place) => place.location).map(async (place, index): Promise<SushiPlace> => ({
-        id: place.id || `place-${index}`, name: place.displayName || 'Sushi restaurant',
-        address: place.formattedAddress || query, rating: place.rating || 0,
-        reviews: place.userRatingCount || 0, price: getPriceLevel(place.priceLevel),
-        openNow: await place.isOpen(), lat: place.location!.lat(), lng: place.location!.lng(),
-        mapsUrl: place.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName || 'sushi')}`,
-        note: index === 0 ? 'Top match nearby' : index < 4 ? 'A local favorite' : 'Worth a look',
-      })));
-      if (!livePlaces.length) throw new Error('No places found');
-      setPlaces(livePlaces);
-      setActiveId(livePlaces[0].id);
-      setNotice(`${livePlaces.length} lovely options around ${query}.`);
+      const location = locationResponse.places[0];
+      if (!location?.location) throw new Error('Location not found');
+
+      const center = { lat: location.location.lat(), lng: location.location.lng() };
+      const label = location.displayName || location.formattedAddress || query;
+      await searchSushiNearby(placesLibrary, center, label);
     } catch (error) {
+      console.error('Google Maps search failed', error);
       setNotice(error instanceof Error ? `${error.message}. Try a nearby city or district.` : 'Search failed. Try again.');
     } finally { setLoading(false); }
   }
@@ -177,15 +292,21 @@ function App() {
     if (!navigator.geolocation) { setNotice('Location is not available in this browser.'); return; }
     setNotice('Finding your neighborhood…');
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      if (apiKey && mapReady) {
-        try {
-          const { Geocoder } = (await google.maps.importLibrary('geocoding')) as google.maps.GeocodingLibrary;
-          const result = await new Geocoder().geocode({ location: { lat: coords.latitude, lng: coords.longitude } });
-          const label = result.results[0]?.formatted_address || `${coords.latitude.toFixed(3)}, ${coords.longitude.toFixed(3)}`;
-          setRegion(label); setActiveRegion(label);
-          setNotice('Location found — press Find sushi to search here.');
-        } catch { setNotice('Location found — enter the district name to search nearby.'); }
-      } else { setNotice('Location found. Live nearby results need a Google Maps API key.'); }
+      if (!apiKey || !mapReady || !mapRef.current) {
+        setNotice('Location found. Live nearby results need a Google Maps API key.');
+        return;
+      }
+      setLoading(true);
+      setNotice('Finding sushi near your current location…');
+      try {
+        const placesLibrary = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
+        const center = { lat: coords.latitude, lng: coords.longitude };
+        setRegion('Current location');
+        await searchSushiNearby(placesLibrary, center, 'your current location');
+      } catch (error) {
+        console.error('Nearby Google Maps search failed', error);
+        setNotice(error instanceof Error ? `${error.message}. Try entering a city or district.` : 'Nearby search failed. Try again.');
+      } finally { setLoading(false); }
     }, () => setNotice('Location permission was not granted.'), { enableHighAccuracy: false, timeout: 8000 });
   }
 
@@ -228,7 +349,7 @@ function App() {
       <section className="content-grid" aria-label="Sushi restaurant results">
         <div className="results-panel">
           <div className="results-heading">
-            <div><span className="eyebrow">Near {activeRegion}</span><h2>{filteredPlaces.length} places to fall for</h2></div>
+            <div><span className="eyebrow">Within 10 km of {activeRegion}</span><h2>{filteredPlaces.length} places to fall for</h2></div>
             <div className="filters">
               <button className={minRating ? 'filter active' : 'filter'} type="button" onClick={() => setMinRating(minRating ? 0 : 4.5)}><Star size={14} fill={minRating ? 'currentColor' : 'none'} /> 4.5+</button>
               <button className={openOnly ? 'filter active' : 'filter'} type="button" onClick={() => setOpenOnly(!openOnly)}>{openOnly && <Check size={14} />} Open now</button>
@@ -254,8 +375,8 @@ function App() {
         </div>
 
         <aside className="map-panel" aria-label="Map of sushi restaurants">
-          <div ref={mapNode} className={apiKey ? 'google-map' : 'google-map hidden'} />
-          {!apiKey && <div className="demo-map" aria-label="Demo map illustration"><span className="park-label">PARCO SEMPIONE</span><span className="waterway" />{filteredPlaces.map((place, index) => <button key={place.id} className={place.id === activeId ? `map-pin pin-${index + 1} active` : `map-pin pin-${index + 1}`} type="button" onClick={() => setActiveId(place.id)} aria-label={`Select ${place.name}`}>{index + 1}</button>)}</div>}
+          <div ref={mapNode} className={apiKey && !mapFailed ? 'google-map' : 'google-map hidden'} />
+          {(!apiKey || mapFailed) && <div className="demo-map" aria-label="Demo map illustration"><span className="park-label">PARCO SEMPIONE</span><span className="waterway" />{filteredPlaces.map((place, index) => <button key={place.id} className={place.id === activeId ? `map-pin pin-${index + 1} active` : `map-pin pin-${index + 1}`} type="button" onClick={() => setActiveId(place.id)} aria-label={`Select ${place.name}`}>{index + 1}</button>)}</div>}
           <div className="map-label"><Navigation size={14} /> {activeRegion}</div>
           <button className="map-recenter" type="button" onClick={() => { const active = places.find((place) => place.id === activeId); if (active && mapRef.current) mapRef.current.panTo({ lat: active.lat, lng: active.lng }); }} aria-label="Center selected restaurant"><LocateFixed size={18} /></button>
           <div className="map-card"><span>Tonight's shortlist</span><strong>{saved.length || 'No'} spot{saved.length === 1 ? '' : 's'} saved</strong><button type="button" onClick={pickForUs}>Let fate choose <ChevronDown size={15} /></button></div>
