@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  ArrowUpRight, Check, ChevronDown, Heart, LocateFixed, MapPin,
+  ArrowUpRight, Check, Heart, LocateFixed, MapPin,
   Navigation, Search, Sparkles, Star, X,
 } from 'lucide-react';
 import './styles.css';
@@ -17,15 +17,14 @@ type SushiPlace = {
   lat: number;
   lng: number;
   mapsUrl: string;
-  note: string;
 };
 
 const demoPlaces: SushiPlace[] = [
-  { id: 'demo-1', name: 'Iyo Omakase', address: 'Via Piero della Francesca, Milano', rating: 4.8, reviews: 1240, price: 4, openNow: true, lat: 45.483, lng: 9.161, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Iyo+Milano', note: "Tonight's splurge" },
-  { id: 'demo-2', name: 'Poporoya', address: 'Via Bartolomeo Eustachi, Milano', rating: 4.6, reviews: 2760, price: 2, openNow: false, lat: 45.477, lng: 9.218, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Poporoya+Milano', note: 'Tiny, iconic, no fuss' },
-  { id: 'demo-3', name: 'Temakinho', address: 'Corso Garibaldi, Milano', rating: 4.5, reviews: 1910, price: 3, openNow: true, lat: 45.478, lng: 9.184, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Temakinho+Milano', note: 'Colorful Brazilian twist' },
-  { id: 'demo-4', name: "J'S Hiro", address: 'Via Carlo Vittadini, Milano', rating: 4.7, reviews: 682, price: 3, openNow: true, lat: 45.447, lng: 9.193, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=J%27S+Hiro+Milano', note: 'A quiet hidden gem' },
-  { id: 'demo-5', name: 'Neta', address: 'Via Palermo, Milano', rating: 4.6, reviews: 510, price: 3, openNow: true, lat: 45.476, lng: 9.185, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Neta+Milano', note: 'Date-night energy' },
+  { id: 'demo-1', name: 'Iyo Omakase', address: 'Via Piero della Francesca, Milano', rating: 4.8, reviews: 1240, price: 4, openNow: true, lat: 45.483, lng: 9.161, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Iyo+Milano' },
+  { id: 'demo-2', name: 'Poporoya', address: 'Via Bartolomeo Eustachi, Milano', rating: 4.6, reviews: 2760, price: 2, openNow: false, lat: 45.477, lng: 9.218, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Poporoya+Milano' },
+  { id: 'demo-3', name: 'Temakinho', address: 'Corso Garibaldi, Milano', rating: 4.5, reviews: 1910, price: 3, openNow: true, lat: 45.478, lng: 9.184, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Temakinho+Milano' },
+  { id: 'demo-4', name: "J'S Hiro", address: 'Via Carlo Vittadini, Milano', rating: 4.7, reviews: 682, price: 3, openNow: true, lat: 45.447, lng: 9.193, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=J%27S+Hiro+Milano' },
+  { id: 'demo-5', name: 'Neta', address: 'Via Palermo, Milano', rating: 4.6, reviews: 510, price: 3, openNow: true, lat: 45.476, lng: 9.185, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Neta+Milano' },
 ];
 
 let mapsLoader: Promise<void> | null = null;
@@ -127,7 +126,6 @@ function toSushiPlace(place: google.maps.places.Place, index: number, fallbackAd
     lat: place.location.lat(),
     lng: place.location.lng(),
     mapsUrl: place.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName || 'sushi')}`,
-    note: index === 0 ? 'Top match nearby' : index < 4 ? 'A local favorite' : 'Worth a look',
   };
 }
 
@@ -326,30 +324,33 @@ function App() {
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Maki a Choice home"><span className="brand-mark" aria-hidden="true"><span /></span><span>Maki a Choice</span></a>
         <div className="top-actions">
-          <button className="saved-pill" type="button" onClick={() => setNotice(saved.length ? `${saved.length} saved spot${saved.length === 1 ? '' : 's'} — use Pick for us when you’re ready.` : 'Tap the hearts to make a shortlist.')}><Heart size={16} fill={saved.length ? 'currentColor' : 'none'} />{saved.length} saved</button>
-          <button className="primary-button compact" type="button" onClick={pickForUs}><Sparkles size={16} /> Pick for us</button>
+          <button className="saved-pill" type="button" onClick={() => setNotice(saved.length ? `${saved.length} saved spot${saved.length === 1 ? '' : 's'} — use Pick for us when you’re ready.` : 'Tap the hearts to make a shortlist.')}><Heart size={16} fill={saved.length ? 'currentColor' : 'none'} /><span>{saved.length} saved</span></button>
+          <button className="primary-button compact" type="button" onClick={pickForUs}><Sparkles size={16} /><span className="pick-label">Pick for us</span></button>
         </div>
       </header>
 
-      <section className="hero" id="top">
-        <div><span className="eyebrow">Dinner, decided.</span><h1>Find the one<br /><em>worth dressing up for.</em></h1></div>
-        <p>Pick a neighborhood. Save her favorites.<br />Let fate handle the final decision.</p>
-      </section>
+      <div className="page-content">
+        <section className="hero" id="top">
+          <div><span className="eyebrow">Sushi, sorted.</span><h1>Good sushi.<br /><em>Close by.</em></h1></div>
+          <p>Choose an area and get the best sushi spots within 10 km. Save a few, or let us pick.</p>
+        </section>
 
-      <form className="search-card" onSubmit={searchRegion}>
-        <div className="search-field">
-          <MapPin size={20} aria-hidden="true" />
-          <label><span>Where are we looking?</span><input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="City, neighborhood or region" aria-label="City, neighborhood or region" /></label>
-          <button className="location-button" type="button" onClick={useMyLocation} aria-label="Use my current location" title="Use my location"><LocateFixed size={19} /></button>
-        </div>
-        <button className="primary-button search-button" type="submit" disabled={loading}><Search size={18} /> {loading ? 'Searching…' : 'Find sushi'}</button>
-      </form>
-      <div className="status-row" role="status"><span className={apiKey && mapReady ? 'live-dot' : 'demo-dot'} /> {notice}</div>
+        <section className="search-section" aria-label="Search location">
+          <form className="search-card" onSubmit={searchRegion}>
+            <div className="search-field">
+              <MapPin size={20} aria-hidden="true" />
+              <label><span>Location</span><input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="City, neighborhood or address" aria-label="City, neighborhood or address" /></label>
+              <button className="location-button" type="button" onClick={useMyLocation} aria-label="Use my current location" title="Use my location"><LocateFixed size={19} /></button>
+            </div>
+            <button className="primary-button search-button" type="submit" disabled={loading}><Search size={18} /> {loading ? 'Searching…' : 'Find sushi'}</button>
+          </form>
+          <div className="status-row" role="status"><span className={apiKey && mapReady ? 'live-dot' : 'demo-dot'} /> {notice}</div>
+        </section>
 
-      <section className="content-grid" aria-label="Sushi restaurant results">
-        <div className="results-panel">
+        <section className="content-grid" aria-label="Sushi restaurant results">
+          <section className="results-panel" aria-label="Restaurant list">
           <div className="results-heading">
-            <div><span className="eyebrow">Within 10 km of {activeRegion}</span><h2>{filteredPlaces.length} places to fall for</h2></div>
+            <div><span className="eyebrow">Within 10 km</span><h2>{filteredPlaces.length} places near {activeRegion}</h2></div>
             <div className="filters">
               <button className={minRating ? 'filter active' : 'filter'} type="button" onClick={() => setMinRating(minRating ? 0 : 4.5)}><Star size={14} fill={minRating ? 'currentColor' : 'none'} /> 4.5+</button>
               <button className={openOnly ? 'filter active' : 'filter'} type="button" onClick={() => setOpenOnly(!openOnly)}>{openOnly && <Check size={14} />} Open now</button>
@@ -360,7 +361,7 @@ function App() {
               <article key={place.id} className={place.id === activeId ? 'place-card active' : 'place-card'} onMouseEnter={() => setActiveId(place.id)}>
                 <button className="card-main" type="button" onClick={() => setActiveId(place.id)} aria-label={`Show ${place.name} on map`}>
                   <span className="place-number">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="place-copy"><span className="place-kicker">{place.note}</span><strong>{place.name}</strong><span className="place-address">{place.address}</span>
+                  <span className="place-copy"><strong>{place.name}</strong><span className="place-address">{place.address}</span>
                     <span className="place-meta"><b><Star size={13} fill="currentColor" /> {place.rating.toFixed(1)}</b><span>{place.reviews.toLocaleString()} reviews</span><span>{'€'.repeat(place.price)}</span>{place.openNow !== undefined && <span className={place.openNow ? 'open' : 'closed'}>{place.openNow ? 'Open' : 'Closed'}</span>}</span>
                   </span>
                 </button>
@@ -372,18 +373,18 @@ function App() {
             ))}
             {!filteredPlaces.length && <div className="empty-state"><span>🍣</span><h3>No rolls in sight</h3><p>Try loosening a filter or searching a nearby district.</p></div>}
           </div>
-        </div>
+          </section>
 
-        <aside className="map-panel" aria-label="Map of sushi restaurants">
-          <div ref={mapNode} className={apiKey && !mapFailed ? 'google-map' : 'google-map hidden'} />
-          {(!apiKey || mapFailed) && <div className="demo-map" aria-label="Demo map illustration"><span className="park-label">PARCO SEMPIONE</span><span className="waterway" />{filteredPlaces.map((place, index) => <button key={place.id} className={place.id === activeId ? `map-pin pin-${index + 1} active` : `map-pin pin-${index + 1}`} type="button" onClick={() => setActiveId(place.id)} aria-label={`Select ${place.name}`}>{index + 1}</button>)}</div>}
-          <div className="map-label"><Navigation size={14} /> {activeRegion}</div>
-          <button className="map-recenter" type="button" onClick={() => { const active = places.find((place) => place.id === activeId); if (active && mapRef.current) mapRef.current.panTo({ lat: active.lat, lng: active.lng }); }} aria-label="Center selected restaurant"><LocateFixed size={18} /></button>
-          <div className="map-card"><span>Tonight's shortlist</span><strong>{saved.length || 'No'} spot{saved.length === 1 ? '' : 's'} saved</strong><button type="button" onClick={pickForUs}>Let fate choose <ChevronDown size={15} /></button></div>
-        </aside>
-      </section>
+          <aside className="map-panel" aria-label="Map of sushi restaurants">
+            <div ref={mapNode} className={apiKey && !mapFailed ? 'google-map' : 'google-map hidden'} />
+            {(!apiKey || mapFailed) && <div className="demo-map" aria-label="Demo map illustration"><span className="park-label">PARCO SEMPIONE</span><span className="waterway" />{filteredPlaces.map((place, index) => <button key={place.id} className={place.id === activeId ? `map-pin pin-${index + 1} active` : `map-pin pin-${index + 1}`} type="button" onClick={() => setActiveId(place.id)} aria-label={`Select ${place.name}`}>{index + 1}</button>)}</div>}
+            <div className="map-label"><Navigation size={14} /><span><small>Search area</small>{activeRegion}</span></div>
+            <button className="map-recenter" type="button" onClick={() => { const active = places.find((place) => place.id === activeId); if (active && mapRef.current) mapRef.current.panTo({ lat: active.lat, lng: active.lng }); }} aria-label="Center selected restaurant"><LocateFixed size={18} /></button>
+          </aside>
+        </section>
 
-      <footer><span>Made for good taste &amp; great company.</span><span>Places by Google Maps</span></footer>
+        <footer><span>Maki a Choice</span><span>Places by Google Maps</span></footer>
+      </div>
       {winner && <div className="modal-backdrop" role="presentation" onMouseDown={() => setWinner(null)}><section className="winner-modal" role="dialog" aria-modal="true" aria-labelledby="winner-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={() => setWinner(null)} aria-label="Close"><X size={18} /></button><span className="winner-emoji">🍣</span><span className="eyebrow">The universe has spoken</span><h2 id="winner-title">{winner.name}</h2><p>{winner.address}</p><div className="winner-meta"><Star size={15} fill="currentColor" /> {winner.rating.toFixed(1)} <span>·</span> {'€'.repeat(winner.price)}</div><a className="primary-button" href={winner.mapsUrl} target="_blank" rel="noreferrer">Take me there <Navigation size={17} /></a><button className="try-again" type="button" onClick={pickForUs}>Not feeling it? Pick again</button></section></div>}
     </main>
   );
