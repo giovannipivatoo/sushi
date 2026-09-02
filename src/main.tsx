@@ -232,7 +232,10 @@ function App() {
       const section = journeyRef.current;
       if (!section) return;
       const rect = section.getBoundingClientRect();
-      const distance = section.offsetHeight - window.innerHeight;
+      const stageHeight = section.firstElementChild instanceof HTMLElement
+        ? section.firstElementChild.offsetHeight
+        : viewport.height;
+      const distance = section.offsetHeight - stageHeight;
       const progress = clamp(-rect.top / Math.max(distance, 1));
       setScrollProgress(progress);
       if (progress < 0.86) soundPlayedRef.current = false;
@@ -244,10 +247,20 @@ function App() {
     const onScroll = () => {
       if (!frame) frame = window.requestAnimationFrame(updateProgress);
     };
+    const syncStableViewport = () => {
+      const section = journeyRef.current;
+      const stage = section?.firstElementChild;
+      setViewport({
+        width: section?.clientWidth || window.innerWidth,
+        height: stage instanceof HTMLElement ? stage.offsetHeight : window.innerHeight,
+      });
+    };
     const onResize = () => {
-      setViewport({ width: window.innerWidth, height: window.innerHeight });
+      if (Math.abs(window.innerWidth - viewport.width) < 8) return;
+      syncStableViewport();
       onScroll();
     };
+    syncStableViewport();
     updateProgress();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
@@ -256,7 +269,7 @@ function App() {
       window.removeEventListener('resize', onResize);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [viewport.width, viewport.height]);
 
   useEffect(() => {
     if (!apiKey || !mapNode.current) return;
@@ -386,8 +399,8 @@ function App() {
           </div>
 
           <div className="moving-piece moving-nigiri" style={{ transform: `translate3d(${position(viewport.width * -0.57, nigiriEnd.x, nigiriProgress)}px, ${position(viewport.height * 0.73, nigiriEnd.y, nigiriProgress)}px, 0) rotate(${-28 + nigiriProgress * 366}deg) scale(${0.84 + nigiriProgress * 0.04})` }}><Nigiri /></div>
-          <div className="moving-piece moving-ebi" style={{ transform: `translate3d(${position(viewport.width * 1.16, ebiEnd.x, ebiProgress)}px, ${position(viewport.height * 0.77, ebiEnd.y, ebiProgress)}px, 0) rotate(${18 + ebiProgress * 350}deg) scale(${0.76 + ebiProgress * 0.1})` }}><Ebi /></div>
           <div className="moving-piece moving-maki" style={{ transform: `translate3d(${position(viewport.width * 1.18, makiEnd.x, makiProgress)}px, ${position(viewport.height * 0.61, makiEnd.y, makiProgress)}px, 0) rotate(${makiProgress * 360 - 25}deg) scale(${0.78 + makiProgress * 0.12})` }}><Maki /></div>
+          <div className="moving-piece moving-ebi" style={{ transform: `translate3d(${position(viewport.width * 1.16, ebiEnd.x, ebiProgress)}px, ${position(viewport.height * 0.77, ebiEnd.y, ebiProgress)}px, 0) rotate(${18 + ebiProgress * 350}deg) scale(${0.76 + ebiProgress * 0.1})` }}><Ebi /></div>
 
           <div className="sushi-plate" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }} />
           <div className="plate-front" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }} />
