@@ -2,7 +2,7 @@
   "name": "sushi",
   "version": "0.1.0",
   "private": true,
-  "description": "A delightful Google Maps-powered sushi restaurant picker.",
+  "description": "A mobile scroll story leading to sushi restaurants in Schio.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

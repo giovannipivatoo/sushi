@@ -1,49 +1,66 @@
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  ArrowUpRight, Check, Heart, LocateFixed, MapPin,
-  Navigation, Search, Sparkles, Star, X,
-} from 'lucide-react';
+import { ArrowUpRight, MapPin, Navigation } from 'lucide-react';
 import './styles.css';
 
 type SushiPlace = {
   id: string;
   name: string;
   address: string;
-  rating: number;
-  reviews: number;
-  price: number;
-  openNow?: boolean;
+  note: string;
+  rating?: number;
   lat: number;
   lng: number;
   mapsUrl: string;
 };
 
-const demoPlaces: SushiPlace[] = [
-  { id: 'demo-1', name: 'Iyo Omakase', address: 'Via Piero della Francesca, Milano', rating: 4.8, reviews: 1240, price: 4, openNow: true, lat: 45.483, lng: 9.161, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Iyo+Milano' },
-  { id: 'demo-2', name: 'Poporoya', address: 'Via Bartolomeo Eustachi, Milano', rating: 4.6, reviews: 2760, price: 2, openNow: false, lat: 45.477, lng: 9.218, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Poporoya+Milano' },
-  { id: 'demo-3', name: 'Temakinho', address: 'Corso Garibaldi, Milano', rating: 4.5, reviews: 1910, price: 3, openNow: true, lat: 45.478, lng: 9.184, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Temakinho+Milano' },
-  { id: 'demo-4', name: "J'S Hiro", address: 'Via Carlo Vittadini, Milano', rating: 4.7, reviews: 682, price: 3, openNow: true, lat: 45.447, lng: 9.193, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=J%27S+Hiro+Milano' },
-  { id: 'demo-5', name: 'Neta', address: 'Via Palermo, Milano', rating: 4.6, reviews: 510, price: 3, openNow: true, lat: 45.476, lng: 9.185, mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Neta+Milano' },
+const SCHIO = {
+  label: 'Schio, Italia',
+  center: { lat: 45.7142, lng: 11.3568 },
+};
+
+const localPlaces: SushiPlace[] = [
+  {
+    id: 'aji-osteria',
+    name: 'Aji Osteria Giapponese',
+    address: 'Via Giarette 13, Schio',
+    note: 'Per una cena fatta con calma.',
+    rating: 4.8,
+    lat: 45.7122,
+    lng: 11.3484,
+    mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Aji+Osteria+Giapponese+Schio',
+  },
+  {
+    id: 'fude-ramen',
+    name: 'Fude Ramen',
+    address: 'Viale Europa Unita 2/A, Schio',
+    note: 'Vivace, informale, molto facile.',
+    rating: 3.8,
+    lat: 45.7103,
+    lng: 11.3494,
+    mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Fude+Ramen+Schio',
+  },
+  {
+    id: 'golden-sushi',
+    name: 'Golden Sushi',
+    address: 'Via Molise 7, Schio',
+    note: 'Quando vuoi andare sul sicuro.',
+    lat: 45.7069,
+    lng: 11.3662,
+    mapsUrl: 'https://www.google.com/maps/search/?api=1&query=Golden+Sushi+Schio',
+  },
 ];
 
 let mapsLoader: Promise<void> | null = null;
-
-const placeFields = [
-  'id', 'displayName', 'formattedAddress', 'rating', 'userRatingCount',
-  'priceLevel', 'location', 'googleMapsURI', 'currentOpeningHours',
-  'regularOpeningHours', 'utcOffsetMinutes',
-];
-const searchRadiusMeters = 10_000;
 
 function loadGoogleMaps(apiKey: string) {
   if (window.google?.maps) return Promise.resolve();
   if (mapsLoader) return mapsLoader;
 
   mapsLoader = new Promise((resolve, reject) => {
-    const callbackName = '__makiMapsReady';
+    const callbackName = '__sushiMapsReady';
     const mapsWindow = window as Window & {
-      __makiMapsReady?: () => void;
+      __sushiMapsReady?: () => void;
       gm_authFailure?: () => void;
     };
     let settled = false;
@@ -54,338 +71,246 @@ function loadGoogleMaps(apiKey: string) {
       delete mapsWindow[callbackName];
       callback();
     };
+
     mapsWindow[callbackName] = () => finish(resolve);
-    mapsWindow.gm_authFailure = () => finish(() => {
-      mapsLoader = null;
-      reject(new Error('Google Maps rejected the API key.'));
-    });
+    mapsWindow.gm_authFailure = () => finish(() => reject(new Error('Google Maps authentication failed')));
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async&libraries=maps,places,marker&callback=${callbackName}`;
     script.async = true;
-    script.onerror = () => finish(() => {
-      mapsLoader = null;
-      reject(new Error('Google Maps could not be loaded.'));
-    });
-    const timeout = window.setTimeout(() => finish(() => {
-      mapsLoader = null;
-      reject(new Error('Google Maps took too long to load.'));
-    }), 15000);
+    script.onerror = () => finish(() => reject(new Error('Google Maps failed to load')));
+    const timeout = window.setTimeout(() => finish(() => reject(new Error('Google Maps timed out'))), 15000);
     document.head.appendChild(script);
   });
+
   return mapsLoader;
 }
 
-function getPriceLevel(level?: string | number | null) {
-  if (typeof level === 'number') return Math.min(4, Math.max(1, level));
-  const prices: Record<string, number> = {
-    FREE: 1,
-    INEXPENSIVE: 1,
-    MODERATE: 2,
-    EXPENSIVE: 3,
-    VERY_EXPENSIVE: 4,
-    PRICE_LEVEL_FREE: 1,
-    PRICE_LEVEL_INEXPENSIVE: 1,
-    PRICE_LEVEL_MODERATE: 2,
-    PRICE_LEVEL_EXPENSIVE: 3,
-    PRICE_LEVEL_VERY_EXPENSIVE: 4,
-  };
-  return prices[String(level)] ?? 2;
+function clamp(value: number, min = 0, max = 1) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function getOpenNow(place: google.maps.places.Place): boolean | undefined {
-  const openingHours = place.currentOpeningHours ?? place.regularOpeningHours;
-  const utcOffsetMinutes = place.utcOffsetMinutes;
-  if (!openingHours?.periods.length || utcOffsetMinutes == null) return undefined;
-
-  const localNow = new Date(Date.now() + utcOffsetMinutes * 60_000);
-  const minutesInWeek = localNow.getUTCDay() * 1440 + localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
-  const weekLength = 7 * 1440;
-
-  return openingHours.periods.some((period) => {
-    const opensAt = period.open.day * 1440 + period.open.hour * 60 + period.open.minute;
-    if (!period.close) return true;
-    let closesAt = period.close.day * 1440 + period.close.hour * 60 + period.close.minute;
-    if (closesAt <= opensAt) closesAt += weekLength;
-    const comparableNow = minutesInWeek < opensAt && closesAt > weekLength
-      ? minutesInWeek + weekLength
-      : minutesInWeek;
-    return comparableNow >= opensAt && comparableNow < closesAt;
-  });
+function windowed(progress: number, start: number, end: number) {
+  return clamp((progress - start) / (end - start));
 }
 
-function toSushiPlace(place: google.maps.places.Place, index: number, fallbackAddress: string): SushiPlace | null {
-  if (!place.location) return null;
-  return {
-    id: place.id || `place-${index}`,
-    name: place.displayName || 'Sushi restaurant',
-    address: place.formattedAddress || fallbackAddress,
-    rating: place.rating || 0,
-    reviews: place.userRatingCount || 0,
-    price: getPriceLevel(place.priceLevel),
-    openNow: getOpenNow(place),
-    lat: place.location.lat(),
-    lng: place.location.lng(),
-    mapsUrl: place.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName || 'sushi')}`,
-  };
+function Maki({ className = '' }: { className?: string }) {
+  return <div className={`sushi-piece maki ${className}`} aria-hidden="true"><span className="maki-rice"><i /></span></div>;
+}
+
+function Nigiri({ className = '' }: { className?: string }) {
+  return <div className={`sushi-piece nigiri ${className}`} aria-hidden="true"><span className="nigiri-rice" /><span className="nigiri-fish"><i /><i /><i /></span></div>;
+}
+
+function Ebi({ className = '' }: { className?: string }) {
+  return <div className={`sushi-piece ebi ${className}`} aria-hidden="true"><span className="ebi-rice" /><span className="ebi-top"><i /><i /><i /><i /></span><span className="ebi-tail" /></div>;
 }
 
 function App() {
   const configuredApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim();
   const apiKey = configuredApiKey && configuredApiKey !== 'your_google_maps_api_key' ? configuredApiKey : '';
+  const journeyRef = useRef<HTMLElement>(null);
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
-  const [region, setRegion] = useState('Milano, Italy');
-  const [activeRegion, setActiveRegion] = useState('Milano, Italy');
-  const [places, setPlaces] = useState<SushiPlace[]>(demoPlaces);
-  const [activeId, setActiveId] = useState(demoPlaces[0].id);
-  const [saved, setSaved] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('maki-saved') || '[]'); }
-    catch { return []; }
-  });
-  const [minRating, setMinRating] = useState(0);
-  const [openOnly, setOpenOnly] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [places, setPlaces] = useState<SushiPlace[]>(localPlaces);
+  const [activeId, setActiveId] = useState(localPlaces[0].id);
   const [mapReady, setMapReady] = useState(false);
-  const [mapFailed, setMapFailed] = useState(false);
-  const [notice, setNotice] = useState(apiKey ? 'Search a neighborhood to begin.' : 'Demo mode — add a Google Maps API key for live results.');
-  const [winner, setWinner] = useState<SushiPlace | null>(null);
 
-  const filteredPlaces = useMemo(
-    () => places.filter((place) => place.rating >= minRating && (!openOnly || place.openNow)),
-    [places, minRating, openOnly],
+  const activePlace = useMemo(
+    () => places.find((place) => place.id === activeId) ?? places[0],
+    [activeId, places],
   );
 
-  useEffect(() => localStorage.setItem('maki-saved', JSON.stringify(saved)), [saved]);
+  useEffect(() => {
+    let frame = 0;
+    const updateProgress = () => {
+      frame = 0;
+      const section = journeyRef.current;
+      if (!section) return;
+      const rect = section.getBoundingClientRect();
+      const distance = section.offsetHeight - window.innerHeight;
+      setScrollProgress(clamp(-rect.top / Math.max(distance, 1)));
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateProgress);
+    };
+    updateProgress();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   useEffect(() => {
     if (!apiKey || !mapNode.current) return;
     let cancelled = false;
+
     loadGoogleMaps(apiKey)
       .then(async () => {
         if (cancelled || !mapNode.current) return;
         const { Map } = (await google.maps.importLibrary('maps')) as google.maps.MapsLibrary;
         mapRef.current = new Map(mapNode.current, {
-          center: { lat: 45.4642, lng: 9.19 }, zoom: 13, mapId: 'DEMO_MAP_ID',
-          clickableIcons: false, streetViewControl: false, mapTypeControl: false,
-          fullscreenControl: false, cameraControl: false,
+          center: SCHIO.center,
+          zoom: 13,
+          mapId: 'DEMO_MAP_ID',
+          clickableIcons: false,
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          cameraControl: false,
+          zoomControl: false,
+          gestureHandling: 'cooperative',
         });
-        setMapFailed(false);
         setMapReady(true);
-        setNotice('Live Google Maps is ready.');
+
+        const placesLibrary = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
+        const { Place, SearchNearbyRankPreference } = placesLibrary;
+        const response = await Place.searchNearby({
+          fields: ['id', 'displayName', 'formattedAddress', 'rating', 'location', 'googleMapsURI'],
+          locationRestriction: { center: SCHIO.center, radius: 10000 },
+          includedTypes: ['sushi_restaurant'],
+          maxResultCount: 6,
+          rankPreference: SearchNearbyRankPreference.POPULARITY,
+        });
+
+        if (cancelled || !response.places.length) return;
+        const livePlaces = response.places.flatMap((place, index): SushiPlace[] => {
+          if (!place.location) return [];
+          return [{
+            id: place.id || `place-${index}`,
+            name: place.displayName || 'Ristorante giapponese',
+            address: place.formattedAddress?.replace(', Italia', '') || SCHIO.label,
+            note: 'Potrebbe essere quello giusto.',
+            rating: place.rating ?? undefined,
+            lat: place.location.lat(),
+            lng: place.location.lng(),
+            mapsUrl: place.googleMapsURI || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.displayName} Schio`)}`,
+          }];
+        });
+        setPlaces(livePlaces);
+        setActiveId(livePlaces[0].id);
       })
-      .catch(() => {
-        setMapFailed(true);
-        setNotice('Maps could not load. Check the API key, enabled APIs, billing, and allowed domains.');
-      });
+      .catch(() => setMapReady(false));
+
     return () => { cancelled = true; };
   }, [apiKey]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     let cancelled = false;
+
     async function drawMarkers() {
       const { AdvancedMarkerElement, PinElement } = (await google.maps.importLibrary('marker')) as google.maps.MarkerLibrary;
       markerRefs.current.forEach((marker) => { marker.map = null; });
       markerRefs.current = [];
-      filteredPlaces.forEach((place, index) => {
+      places.forEach((place, index) => {
         if (cancelled) return;
+        const isActive = place.id === activeId;
         const pin = new PinElement({
-          background: place.id === activeId ? '#e64935' : '#21382f', borderColor: '#fffaf3',
-          glyphColor: '#ffffff', glyphText: String(index + 1), scale: place.id === activeId ? 1.18 : 0.96,
+          background: isActive ? '#ff4f32' : '#172c25',
+          borderColor: '#fff8ec',
+          glyphColor: '#fff8ec',
+          glyphText: String(index + 1),
+          scale: isActive ? 1.15 : 0.88,
         });
         const marker = new AdvancedMarkerElement({
-          map: mapRef.current, position: { lat: place.lat, lng: place.lng },
-          title: place.name, content: pin.element,
+          map: mapRef.current,
+          position: { lat: place.lat, lng: place.lng },
+          title: place.name,
+          content: pin.element,
         });
         marker.addListener('click', () => setActiveId(place.id));
         markerRefs.current.push(marker);
       });
     }
+
     drawMarkers();
     return () => { cancelled = true; };
-  }, [filteredPlaces, activeId, mapReady]);
+  }, [places, activeId, mapReady]);
 
-  function showLivePlaces(
-    results: google.maps.places.Place[],
-    label: string,
-    fallbackAddress: string,
-    searchCenter: google.maps.LatLngLiteral,
-  ) {
-    const livePlaces = results
-      .map((place, index) => toSushiPlace(place, index, fallbackAddress))
-      .filter((place): place is SushiPlace => place !== null);
-
-    setPlaces(livePlaces);
-    setActiveId(livePlaces[0]?.id || '');
-    setActiveRegion(label);
-    setMinRating(0);
-    setOpenOnly(false);
-
-    if (mapRef.current) {
-      if (!livePlaces.length) {
-        mapRef.current.setCenter(searchCenter);
-        mapRef.current.setZoom(12);
-        setNotice(`No sushi restaurants found within 10 km of ${label}.`);
-        return;
-      }
-      const bounds = new google.maps.LatLngBounds();
-      bounds.extend(searchCenter);
-      livePlaces.forEach((place) => bounds.extend({ lat: place.lat, lng: place.lng }));
-      mapRef.current.fitBounds(bounds, 56);
-    }
-    setNotice(`${livePlaces.length} lovely options within 10 km of ${label}.`);
-  }
-
-  async function searchSushiNearby(
-    placesLibrary: google.maps.PlacesLibrary,
-    center: google.maps.LatLngLiteral,
-    label: string,
-  ) {
-    const { Place, SearchNearbyRankPreference } = placesLibrary;
-    const response = await Place.searchNearby({
-      fields: placeFields,
-      locationRestriction: { center, radius: searchRadiusMeters },
-      includedTypes: ['sushi_restaurant'],
-      maxResultCount: 15,
-      rankPreference: SearchNearbyRankPreference.POPULARITY,
-    });
-    showLivePlaces(response.places, label, `Within 10 km of ${label}`, center);
-  }
-
-  async function searchRegion(event: FormEvent) {
-    event.preventDefault();
-    const query = region.trim();
-    if (!query) return;
-    setActiveRegion(query);
-    if (!apiKey || !mapReady || !mapRef.current) {
-      setNotice(apiKey
-        ? 'Google Maps is not ready. Check the key configuration, then reload the page.'
-        : `Showing sample picks near ${query}. Add an API key for live places.`);
-      return;
-    }
-
-    setLoading(true);
-    setNotice(`Finding sushi within 10 km of ${query}…`);
-    try {
-      const placesLibrary = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
-      const locationResponse = await placesLibrary.Place.searchByText({
-        textQuery: query,
-        fields: ['displayName', 'formattedAddress', 'location'],
-        maxResultCount: 1,
-      });
-      const location = locationResponse.places[0];
-      if (!location?.location) throw new Error('Location not found');
-
-      const center = { lat: location.location.lat(), lng: location.location.lng() };
-      const label = location.displayName || location.formattedAddress || query;
-      await searchSushiNearby(placesLibrary, center, label);
-    } catch (error) {
-      console.error('Google Maps search failed', error);
-      setNotice(error instanceof Error ? `${error.message}. Try a nearby city or district.` : 'Search failed. Try again.');
-    } finally { setLoading(false); }
-  }
-
-  function useMyLocation() {
-    if (!navigator.geolocation) { setNotice('Location is not available in this browser.'); return; }
-    setNotice('Finding your neighborhood…');
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      if (!apiKey || !mapReady || !mapRef.current) {
-        setNotice('Location found. Live nearby results need a Google Maps API key.');
-        return;
-      }
-      setLoading(true);
-      setNotice('Finding sushi near your current location…');
-      try {
-        const placesLibrary = (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
-        const center = { lat: coords.latitude, lng: coords.longitude };
-        setRegion('Current location');
-        await searchSushiNearby(placesLibrary, center, 'your current location');
-      } catch (error) {
-        console.error('Nearby Google Maps search failed', error);
-        setNotice(error instanceof Error ? `${error.message}. Try entering a city or district.` : 'Nearby search failed. Try again.');
-      } finally { setLoading(false); }
-    }, () => setNotice('Location permission was not granted.'), { enableHighAccuracy: false, timeout: 8000 });
-  }
-
-  function toggleSaved(id: string) {
-    setSaved((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  }
-
-  function pickForUs() {
-    const savedPlaces = places.filter((place) => saved.includes(place.id));
-    const pool = savedPlaces.length ? savedPlaces : filteredPlaces;
-    if (!pool.length) { setNotice('No spots match those filters yet.'); return; }
-    setWinner(pool[Math.floor(Math.random() * pool.length)]);
-  }
+  const firstPhase = 1 - windowed(scrollProgress, 0.18, 0.34);
+  const secondPhase = Math.min(windowed(scrollProgress, 0.25, 0.4), 1 - windowed(scrollProgress, 0.55, 0.69));
+  const thirdPhase = windowed(scrollProgress, 0.64, 0.82);
+  const plateProgress = windowed(scrollProgress, 0.68, 0.96);
+  const makiProgress = windowed(scrollProgress, 0.03, 0.62);
+  const nigiriProgress = windowed(scrollProgress, 0.18, 0.78);
+  const ebiProgress = windowed(scrollProgress, 0.42, 0.92);
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="Maki a Choice home"><span className="brand-mark" aria-hidden="true"><span /></span><span>Maki a Choice</span></a>
-        <div className="top-actions">
-          <button className="saved-pill" type="button" onClick={() => setNotice(saved.length ? `${saved.length} saved spot${saved.length === 1 ? '' : 's'} — use Pick for us when you’re ready.` : 'Tap the hearts to make a shortlist.')}><Heart size={16} fill={saved.length ? 'currentColor' : 'none'} /><span>{saved.length} saved</span></button>
-          <button className="primary-button compact" type="button" onClick={pickForUs}><Sparkles size={16} /><span className="pick-label">Pick for us</span></button>
+      <section className="hero" id="top">
+        <div className="hero-copy">
+          <span className="overline">Una domanda importante</span>
+          <h1>Ti piace<br />il sushi<br /><em>giusto?</em></h1>
         </div>
-      </header>
+      </section>
 
-      <div className="page-content">
-        <section className="hero" id="top">
-          <div><span className="eyebrow">Sushi, sorted.</span><h1>Good sushi.<br /><em>Close by.</em></h1></div>
-          <p>Choose an area and get the best sushi spots within 10 km. Save a few, or let us pick.</p>
-        </section>
+      <section className="sushi-journey" id="viaggio" ref={journeyRef}>
+        <div className="journey-stage">
+          <div className="journey-topline"><span>01 — La prova</span><span>{String(Math.round(scrollProgress * 100)).padStart(2, '0')}%</span></div>
 
-        <section className="search-section" aria-label="Search location">
-          <form className="search-card" onSubmit={searchRegion}>
-            <div className="search-field">
-              <MapPin size={20} aria-hidden="true" />
-              <label><span>Location</span><input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="City, neighborhood or address" aria-label="City, neighborhood or address" /></label>
-              <button className="location-button" type="button" onClick={useMyLocation} aria-label="Use my current location" title="Use my location"><LocateFixed size={19} /></button>
-            </div>
-            <button className="primary-button search-button" type="submit" disabled={loading}><Search size={18} /> {loading ? 'Searching…' : 'Find sushi'}</button>
-          </form>
-          <div className="status-row" role="status"><span className={apiKey && mapReady ? 'live-dot' : 'demo-dot'} /> {notice}</div>
-        </section>
-
-        <section className="content-grid" aria-label="Sushi restaurant results">
-          <section className="results-panel" aria-label="Restaurant list">
-          <div className="results-heading">
-            <div><span className="eyebrow">Within 10 km</span><h2>{filteredPlaces.length} places near {activeRegion}</h2></div>
-            <div className="filters">
-              <button className={minRating ? 'filter active' : 'filter'} type="button" onClick={() => setMinRating(minRating ? 0 : 4.5)}><Star size={14} fill={minRating ? 'currentColor' : 'none'} /> 4.5+</button>
-              <button className={openOnly ? 'filter active' : 'filter'} type="button" onClick={() => setOpenOnly(!openOnly)}>{openOnly && <Check size={14} />} Open now</button>
-            </div>
+          <div className="journey-copy" aria-live="polite">
+            <p style={{ opacity: firstPhase, transform: `translateY(${(1 - firstPhase) * -22}px)` }}>Quello<br /><em>fatto bene.</em></p>
+            <p style={{ opacity: secondPhase, transform: `translateY(${(1 - secondPhase) * 22}px)` }}>Quello che arriva<br /><em>al momento giusto.</em></p>
+            <p style={{ opacity: thirdPhase, transform: `translateY(${(1 - thirdPhase) * 22}px)` }}>Possibilmente<br /><em>a Schio.</em></p>
           </div>
-          <div className="place-list">
-            {filteredPlaces.map((place, index) => (
-              <article key={place.id} className={place.id === activeId ? 'place-card active' : 'place-card'} onMouseEnter={() => setActiveId(place.id)}>
-                <button className="card-main" type="button" onClick={() => setActiveId(place.id)} aria-label={`Show ${place.name} on map`}>
-                  <span className="place-number">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="place-copy"><strong>{place.name}</strong><span className="place-address">{place.address}</span>
-                    <span className="place-meta"><b><Star size={13} fill="currentColor" /> {place.rating.toFixed(1)}</b><span>{place.reviews.toLocaleString()} reviews</span><span>{'€'.repeat(place.price)}</span>{place.openNow !== undefined && <span className={place.openNow ? 'open' : 'closed'}>{place.openNow ? 'Open' : 'Closed'}</span>}</span>
-                  </span>
-                </button>
-                <div className="card-actions">
-                  <button className={saved.includes(place.id) ? 'heart-button saved' : 'heart-button'} type="button" onClick={() => toggleSaved(place.id)} aria-label={`${saved.includes(place.id) ? 'Remove' : 'Save'} ${place.name}`}><Heart size={19} fill={saved.includes(place.id) ? 'currentColor' : 'none'} /></button>
-                  <a href={place.mapsUrl} target="_blank" rel="noreferrer" aria-label={`Open ${place.name} in Google Maps`}><ArrowUpRight size={18} /></a>
-                </div>
-              </article>
-            ))}
-            {!filteredPlaces.length && <div className="empty-state"><span>🍣</span><h3>No rolls in sight</h3><p>Try loosening a filter or searching a nearby district.</p></div>}
-          </div>
-          </section>
 
-          <aside className="map-panel" aria-label="Map of sushi restaurants">
-            <div ref={mapNode} className={apiKey && !mapFailed ? 'google-map' : 'google-map hidden'} />
-            {(!apiKey || mapFailed) && <div className="demo-map" aria-label="Demo map illustration"><span className="park-label">PARCO SEMPIONE</span><span className="waterway" />{filteredPlaces.map((place, index) => <button key={place.id} className={place.id === activeId ? `map-pin pin-${index + 1} active` : `map-pin pin-${index + 1}`} type="button" onClick={() => setActiveId(place.id)} aria-label={`Select ${place.name}`}>{index + 1}</button>)}</div>}
-            <div className="map-label"><Navigation size={14} /><span><small>Search area</small>{activeRegion}</span></div>
-            <button className="map-recenter" type="button" onClick={() => { const active = places.find((place) => place.id === activeId); if (active && mapRef.current) mapRef.current.panTo({ lat: active.lat, lng: active.lng }); }} aria-label="Center selected restaurant"><LocateFixed size={18} /></button>
-          </aside>
-        </section>
+          <div className="moving-piece moving-maki" style={{ transform: `translate3d(${118 - makiProgress * 136}vw, ${61 - makiProgress * 36}vh, 0) rotate(${makiProgress * 520 - 25}deg) scale(${0.78 + makiProgress * 0.32})` }}><Maki /></div>
+          <div className="moving-piece moving-nigiri" style={{ transform: `translate3d(${-57 + nigiriProgress * 92}vw, ${73 - nigiriProgress * 48}vh, 0) rotate(${-28 + nigiriProgress * 392}deg) scale(${0.84 + nigiriProgress * 0.2})` }}><Nigiri /></div>
+          <div className="moving-piece moving-ebi" style={{ transform: `translate3d(${116 - ebiProgress * 72}vw, ${77 - ebiProgress * 55}vh, 0) rotate(${18 - ebiProgress * 305}deg) scale(${0.76 + ebiProgress * 0.25})` }}><Ebi /></div>
 
-        <footer><span>Maki a Choice</span><span>Places by Google Maps</span></footer>
-      </div>
-      {winner && <div className="modal-backdrop" role="presentation" onMouseDown={() => setWinner(null)}><section className="winner-modal" role="dialog" aria-modal="true" aria-labelledby="winner-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={() => setWinner(null)} aria-label="Close"><X size={18} /></button><span className="winner-emoji">🍣</span><span className="eyebrow">The universe has spoken</span><h2 id="winner-title">{winner.name}</h2><p>{winner.address}</p><div className="winner-meta"><Star size={15} fill="currentColor" /> {winner.rating.toFixed(1)} <span>·</span> {'€'.repeat(winner.price)}</div><a className="primary-button" href={winner.mapsUrl} target="_blank" rel="noreferrer">Take me there <Navigation size={17} /></a><button className="try-again" type="button" onClick={pickForUs}>Not feeling it? Pick again</button></section></div>}
+          <div className="sushi-plate" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }}><span>il tavolo è quasi pronto</span></div>
+          <div className="journey-progress" aria-hidden="true"><i style={{ height: `${scrollProgress * 100}%` }} /></div>
+        </div>
+      </section>
+
+      <section className="map-section" id="mappa">
+        <div className="map-heading">
+          <span className="overline">02 — Dove andiamo?</span>
+          <h2>Ci vediamo<br />a <em>Schio.</em></h2>
+          <p>Tre idee, una mappa e una decisione molto semplice.</p>
+        </div>
+
+        <div className="map-wrap">
+          <div ref={mapNode} className={mapReady ? 'google-map' : 'google-map is-hidden'} />
+          {!mapReady && (
+            <div className="fallback-map" aria-label="Mappa di Schio, Italia">
+              <iframe title="Mappa di Schio" src="https://www.openstreetmap.org/export/embed.html?bbox=11.327%2C45.694%2C11.389%2C45.735&layer=mapnik" loading="lazy" />
+              <div className="map-wash" />
+              {localPlaces.map((place, index) => (
+                <button key={place.id} type="button" className={`fallback-pin pin-${index + 1}${place.id === activeId ? ' is-active' : ''}`} onClick={() => setActiveId(place.id)} aria-label={`Seleziona ${place.name}`}>{index + 1}</button>
+              ))}
+            </div>
+          )}
+
+          <div className="map-location-pill"><MapPin size={15} /> 45.7142° N · 11.3568° E</div>
+          {activePlace && (
+            <article className="active-place-card">
+              <span className="place-number">0{Math.max(1, places.findIndex((place) => place.id === activePlace.id) + 1)}</span>
+              <div><small>La scelta di adesso</small><strong>{activePlace.name}</strong><p>{activePlace.address}</p></div>
+              <a href={activePlace.mapsUrl} target="_blank" rel="noreferrer" aria-label={`Apri ${activePlace.name} su Google Maps`}><Navigation size={18} /></a>
+            </article>
+          )}
+        </div>
+
+        <div className="places-strip" aria-label="Ristoranti di sushi a Schio">
+          {places.map((place, index) => (
+            <button type="button" key={place.id} className={place.id === activeId ? 'place-chip is-active' : 'place-chip'} onClick={() => setActiveId(place.id)}>
+              <span>0{index + 1}</span><strong>{place.name}</strong><small>{place.rating ? `★ ${place.rating.toFixed(1)}` : place.note}</small>
+            </button>
+          ))}
+        </div>
+
+        <footer>
+          <Maki />
+          <p>Quindi, sushi?</p>
+          <a href={activePlace?.mapsUrl} target="_blank" rel="noreferrer">Andiamo <ArrowUpRight size={16} /></a>
+        </footer>
+      </section>
     </main>
   );
 }
