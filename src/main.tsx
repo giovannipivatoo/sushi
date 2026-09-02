@@ -375,7 +375,7 @@ function App() {
   const plateHeight = viewport.width * (wideLayout ? 0.18 : 0.32);
   const plateCenterY = viewport.height * 0.95 - plateHeight / 2;
   const sushiSpread = Math.min(viewport.width * 0.145, 110);
-  const plateRestingLine = plateCenterY - plateHeight * 0.30;
+  const plateRestingLine = plateCenterY - plateHeight * 0.27;
   const makiEnd = { x: viewport.width / 2 - (105 * 0.9) / 2, y: plateRestingLine - 105 * 0.9 };
   const nigiriEnd = { x: viewport.width / 2 - sushiSpread - (150 * 0.88) / 2, y: plateRestingLine - 92 * 0.88 };
   const ebiEnd = { x: viewport.width / 2 + sushiSpread - (150 * 0.86) / 2, y: plateRestingLine - 98 * 0.86 };
@@ -413,7 +413,7 @@ function App() {
       <section className="map-section" id="mappa">
         <div className="map-heading">
           <span className="overline">Dove andiamo?</span>
-          <h2>Scegliamo<br /><em>il posto.</em></h2>
+          <h2>A lei<br /><em>la scelta.</em></h2>
         </div>
 
         <div className="map-wrap">
