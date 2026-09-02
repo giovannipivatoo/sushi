@@ -362,16 +362,17 @@ function App() {
   const plateHeight = viewport.width * (wideLayout ? 0.18 : 0.32);
   const plateCenterY = viewport.height * 0.95 - plateHeight / 2;
   const sushiSpread = Math.min(viewport.width * 0.145, 110);
-  const makiEnd = { x: viewport.width / 2 - (105 * 0.9) / 2, y: plateCenterY - (105 * 0.9) / 2 };
-  const nigiriEnd = { x: viewport.width / 2 - sushiSpread - (150 * 0.88) / 2, y: plateCenterY - (92 * 0.88) / 2 };
-  const ebiEnd = { x: viewport.width / 2 + sushiSpread - (150 * 0.86) / 2, y: plateCenterY - (98 * 0.86) / 2 };
+  const plateRestingLine = plateCenterY + plateHeight * 0.04;
+  const makiEnd = { x: viewport.width / 2 - (105 * 0.9) / 2, y: plateRestingLine - 105 * 0.9 };
+  const nigiriEnd = { x: viewport.width / 2 - sushiSpread - (150 * 0.88) / 2, y: plateRestingLine - 92 * 0.88 };
+  const ebiEnd = { x: viewport.width / 2 + sushiSpread - (150 * 0.86) / 2, y: plateRestingLine - 98 * 0.86 };
   const position = (start: number, end: number, progress: number) => start + (end - start) * progress;
 
   return (
     <main className="app-shell">
       <section className="hero" id="top">
         <div className="hero-copy">
-          <span className="overline">Una domanda importante</span>
+          <span className="overline">Una domanda retorica</span>
           <h1>Ti piace<br />il sushi<br /><em>giusto?</em></h1>
         </div>
       </section>
