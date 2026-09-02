@@ -150,6 +150,7 @@ function App() {
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [places, setPlaces] = useState<SushiPlace[]>(localPlaces);
   const [activeId, setActiveId] = useState(localPlaces[0].id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -243,12 +244,16 @@ function App() {
     const onScroll = () => {
       if (!frame) frame = window.requestAnimationFrame(updateProgress);
     };
+    const onResize = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+      onScroll();
+    };
     updateProgress();
     window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
+    window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('resize', onResize);
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
@@ -353,6 +358,14 @@ function App() {
   const makiProgress = windowed(scrollProgress, 0.03, 0.62);
   const nigiriProgress = windowed(scrollProgress, 0.18, 0.78);
   const ebiProgress = windowed(scrollProgress, 0.42, 0.92);
+  const wideLayout = viewport.width >= 700;
+  const plateHeight = viewport.width * (wideLayout ? 0.18 : 0.32);
+  const plateCenterY = viewport.height * 0.95 - plateHeight / 2;
+  const sushiSpread = Math.min(viewport.width * 0.145, 110);
+  const makiEnd = { x: viewport.width / 2 - (105 * 0.9) / 2, y: plateCenterY - (105 * 0.9) / 2 };
+  const nigiriEnd = { x: viewport.width / 2 - sushiSpread - (150 * 0.88) / 2, y: plateCenterY - (92 * 0.88) / 2 };
+  const ebiEnd = { x: viewport.width / 2 + sushiSpread - (150 * 0.86) / 2, y: plateCenterY - (98 * 0.86) / 2 };
+  const position = (start: number, end: number, progress: number) => start + (end - start) * progress;
 
   return (
     <main className="app-shell">
@@ -371,9 +384,9 @@ function App() {
             <p style={{ opacity: thirdPhase, transform: `translateY(${(1 - thirdPhase) * 22}px)` }}>E soprattutto<br /><em>da condividere.</em></p>
           </div>
 
-          <div className="moving-piece moving-maki" style={{ transform: `translate3d(${118 - makiProgress * 75}vw, ${61 + makiProgress * 9}vh, 0) rotate(${makiProgress * 360 - 25}deg) scale(${0.78 + makiProgress * 0.12})` }}><Maki /></div>
-          <div className="moving-piece moving-nigiri" style={{ transform: `translate3d(${-57 + nigiriProgress * 83}vw, ${73 - nigiriProgress * 2}vh, 0) rotate(${-28 + nigiriProgress * 366}deg) scale(${0.84 + nigiriProgress * 0.04})` }}><Nigiri /></div>
-          <div className="moving-piece moving-ebi" style={{ transform: `translate3d(${116 - ebiProgress * 60}vw, ${77 - ebiProgress * 5}vh, 0) rotate(${18 + ebiProgress * 350}deg) scale(${0.76 + ebiProgress * 0.1})` }}><Ebi /></div>
+          <div className="moving-piece moving-maki" style={{ transform: `translate3d(${position(viewport.width * 1.18, makiEnd.x, makiProgress)}px, ${position(viewport.height * 0.61, makiEnd.y, makiProgress)}px, 0) rotate(${makiProgress * 360 - 25}deg) scale(${0.78 + makiProgress * 0.12})` }}><Maki /></div>
+          <div className="moving-piece moving-nigiri" style={{ transform: `translate3d(${position(viewport.width * -0.57, nigiriEnd.x, nigiriProgress)}px, ${position(viewport.height * 0.73, nigiriEnd.y, nigiriProgress)}px, 0) rotate(${-28 + nigiriProgress * 366}deg) scale(${0.84 + nigiriProgress * 0.04})` }}><Nigiri /></div>
+          <div className="moving-piece moving-ebi" style={{ transform: `translate3d(${position(viewport.width * 1.16, ebiEnd.x, ebiProgress)}px, ${position(viewport.height * 0.77, ebiEnd.y, ebiProgress)}px, 0) rotate(${18 + ebiProgress * 350}deg) scale(${0.76 + ebiProgress * 0.1})` }}><Ebi /></div>
 
           <div className="sushi-plate" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }} />
           <div className="plate-front" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }} />
