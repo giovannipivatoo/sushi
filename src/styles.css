@@ -50,7 +50,7 @@ button { border: 0; }
 .hero h1 em, .map-heading h2 em { color: #fff; font-family: var(--display); font-style: normal; font-weight: 800; text-shadow: 0 0 7px rgba(255, 255, 255, .58), 0 0 28px rgba(255, 255, 255, .28), 0 0 64px rgba(255, 255, 255, .13); }
 .hero h1 em { display: block; margin: 0; text-align: center; }
 
-.sushi-journey { height: 360svh; background: #0a0d0b; color: var(--paper); }
+.sushi-journey { height: 450svh; background: #0a0d0b; color: var(--paper); }
 .journey-stage { height: 100svh; position: sticky; top: 0; overflow: hidden; }
 .journey-stage::before { content: ''; position: absolute; width: 82vw; height: 82vw; left: 9vw; top: 17vh; border: 1px solid rgba(255, 248, 236, .12); border-radius: 50%; }
 .journey-copy { position: absolute; z-index: 4; top: 23%; left: 20px; right: 20px; text-align: center; }

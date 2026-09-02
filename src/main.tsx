@@ -362,7 +362,7 @@ function App() {
   const plateHeight = viewport.width * (wideLayout ? 0.18 : 0.32);
   const plateCenterY = viewport.height * 0.95 - plateHeight / 2;
   const sushiSpread = Math.min(viewport.width * 0.145, 110);
-  const plateRestingLine = plateCenterY - plateHeight * 0.28;
+  const plateRestingLine = plateCenterY - plateHeight * 0.34;
   const makiEnd = { x: viewport.width / 2 - (105 * 0.9) / 2, y: plateRestingLine - 105 * 0.9 };
   const nigiriEnd = { x: viewport.width / 2 - sushiSpread - (150 * 0.88) / 2, y: plateRestingLine - 92 * 0.88 };
   const ebiEnd = { x: viewport.width / 2 + sushiSpread - (150 * 0.86) / 2, y: plateRestingLine - 98 * 0.86 };
@@ -385,9 +385,9 @@ function App() {
             <p style={{ opacity: thirdPhase, transform: `translateY(${(1 - thirdPhase) * 22}px)` }}>E soprattutto<br /><em>da condividere.</em></p>
           </div>
 
-          <div className="moving-piece moving-maki" style={{ transform: `translate3d(${position(viewport.width * 1.18, makiEnd.x, makiProgress)}px, ${position(viewport.height * 0.61, makiEnd.y, makiProgress)}px, 0) rotate(${makiProgress * 360 - 25}deg) scale(${0.78 + makiProgress * 0.12})` }}><Maki /></div>
           <div className="moving-piece moving-nigiri" style={{ transform: `translate3d(${position(viewport.width * -0.57, nigiriEnd.x, nigiriProgress)}px, ${position(viewport.height * 0.73, nigiriEnd.y, nigiriProgress)}px, 0) rotate(${-28 + nigiriProgress * 366}deg) scale(${0.84 + nigiriProgress * 0.04})` }}><Nigiri /></div>
           <div className="moving-piece moving-ebi" style={{ transform: `translate3d(${position(viewport.width * 1.16, ebiEnd.x, ebiProgress)}px, ${position(viewport.height * 0.77, ebiEnd.y, ebiProgress)}px, 0) rotate(${18 + ebiProgress * 350}deg) scale(${0.76 + ebiProgress * 0.1})` }}><Ebi /></div>
+          <div className="moving-piece moving-maki" style={{ transform: `translate3d(${position(viewport.width * 1.18, makiEnd.x, makiProgress)}px, ${position(viewport.height * 0.61, makiEnd.y, makiProgress)}px, 0) rotate(${makiProgress * 360 - 25}deg) scale(${0.78 + makiProgress * 0.12})` }}><Maki /></div>
 
           <div className="sushi-plate" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }} />
           <div className="plate-front" style={{ opacity: plateProgress, transform: `translate(-50%, ${120 - plateProgress * 120}px) scale(${0.76 + plateProgress * 0.24})` }} />
